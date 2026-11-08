@@ -233,7 +233,11 @@ final class EpgRepository {
 
     boolean needsSync() {
         EpgDb db = EpgDb.get(ctx);
-        return System.currentTimeMillis() - db.updatedAt() > SYNC_STALE_MS || db.count() == 0;
+        long updated = db.updatedAt();
+        int count = db.count();
+        boolean stale = System.currentTimeMillis() - updated > SYNC_STALE_MS || count == 0;
+        Log.i(TAG, "schedule store: " + count + " programs, updated " + updated + (stale ? ", refreshing" : ", fresh"));
+        return stale;
     }
 
     boolean isSyncing() {

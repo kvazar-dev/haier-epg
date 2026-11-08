@@ -35,9 +35,9 @@ final class XmltvSync {
      */
     static final String[][] SOURCES = {
             { "teleguide.info", "https://www.teleguide.info/download/new3/xmltv.xml.gz" },
-            { "it999.ru", "https://epg.it999.ru/epg2.xml.gz" },
             { "programtv.ru", "http://programtv.ru/xmltv.xml.gz" },
             { "iptvx.one", "https://iptvx.one/EPG_LITE" },
+            { "it999.ru", "https://epg.it999.ru/epg2.xml.gz" },
     };
     private static final int CONNECT_TIMEOUT_MS = 20_000;
     private static final int READ_TIMEOUT_MS = 60_000;

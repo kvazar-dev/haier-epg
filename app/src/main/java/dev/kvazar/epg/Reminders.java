@@ -117,13 +117,15 @@ final class Reminders {
     /** After boot or a clock change: drop what is past, arm the rest again. */
     static void rescheduleAll(Context ctx) {
         long now = System.currentTimeMillis();
+        List<Reminder> all = all(ctx);
         List<Reminder> kept = new ArrayList<>();
-        for (Reminder r : all(ctx)) {
+        for (Reminder r : all) {
             if (r.start < now - GRACE_MS) continue;
             kept.add(r);
             schedule(ctx, r);
         }
-        save(ctx, kept);
+        if (kept.size() != all.size()) save(ctx, kept);
+        Log.i(Tuner.TAG, "reminders: " + kept.size() + " armed, " + (all.size() - kept.size()) + " expired");
     }
 
     private static PendingIntent pending(Context ctx, Reminder r) {
