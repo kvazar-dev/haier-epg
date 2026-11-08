@@ -19,4 +19,6 @@
     <string name="channel_fmt">%1$s · %2$s</string>
     <string name="time_range">%1$s – %2$s</string>
     <string name="scheduled_mark">⏰</string>
+    <string name="sync_source">Программа: %1$s</string>
+    <string name="sync_manual">Обновление программы передач…</string>
 </resources>

@@ -15,6 +15,9 @@
     <!-- Lets the reminder open its prompt from the background (Android 10+ blocks that otherwise).
          Granted once with: appops set dev.kvazar.epg SYSTEM_ALERT_WINDOW allow -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- The downloaded schedule (XMLTV), once or twice a day. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <queries>
         <package android:name="com.mediatek.wwtv.tvcenter" />
@@ -29,6 +32,7 @@
         android:icon="@drawable/banner"
         android:banner="@drawable/banner"
         android:allowBackup="false"
+        android:usesCleartextTraffic="true"
         android:theme="@style/Theme.Guide">
 
         <activity
@@ -55,6 +59,11 @@
             android:theme="@style/Theme.Guide.Prompt" />
 
         <receiver android:name=".ReminderReceiver" android:exported="false" />
+
+        <service
+            android:name=".EpgSyncJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
 
         <receiver android:name=".BootReceiver" android:exported="true">
             <intent-filter>

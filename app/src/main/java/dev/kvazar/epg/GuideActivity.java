@@ -25,6 +25,7 @@ public final class GuideActivity extends Activity implements EpgRepository.Liste
     private GuideView guide;
     private TextView channelText, titleText, timeText, descText, clockText, dateText, message, numberEntry;
     private final StringBuilder number = new StringBuilder();
+    private String syncStatus;
 
     private final Runnable clockTick = new Runnable() {
         @Override public void run() {
@@ -55,6 +56,8 @@ public final class GuideActivity extends Activity implements EpgRepository.Liste
         guide.setListener(this);
         guide.setCurrentChannel(Prefs.lastTuned(this));
         updateClock();
+        // am start -n dev.kvazar.epg/.GuideActivity --ez dump true : channel and program diagnostics to logcat (tag EPG).
+        if (getIntent().getBooleanExtra("dump", false)) repo.debugDump();
     }
 
     @Override protected void onStart() {
@@ -70,8 +73,14 @@ public final class GuideActivity extends Activity implements EpgRepository.Liste
             showMessage(repo.channels().isEmpty() ? getString(R.string.loading) : null);
             if (!repo.channels().isEmpty()) onChannels(repo.channels());
             repo.start();
+            startSyncIfStale();
         }
         handler.post(clockTick);
+    }
+
+    private void startSyncIfStale() {
+        EpgSyncJob.schedule(this);
+        if (repo.needsSync()) repo.syncInBackground();
     }
 
     @Override protected void onStop() {
@@ -88,6 +97,7 @@ public final class GuideActivity extends Activity implements EpgRepository.Liste
         if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
             showMessage(getString(R.string.loading));
             repo.start();
+            startSyncIfStale();
         } else {
             showMessage(getString(R.string.no_permission));
         }
@@ -108,6 +118,16 @@ public final class GuideActivity extends Activity implements EpgRepository.Liste
 
     @Override public void onError(String msg) {
         showMessage(getString(R.string.no_permission));
+    }
+
+    @Override public void onSyncStatus(String message) {
+        syncStatus = message;
+        updateClock();
+        if (message != null && message.startsWith("Программа не загружена")) {
+            Toast.makeText(this, message, Toast.LENGTH_LONG).show();
+            syncStatus = null;
+            updateClock();
+        }
     }
 
     // GuideView.Listener
@@ -155,7 +175,12 @@ public final class GuideActivity extends Activity implements EpgRepository.Liste
     private void updateClock() {
         long now = System.currentTimeMillis();
         clockText.setText(TimeFmt.hm(now));
-        dateText.setText(capitalize(fullDate(now)));
+        String line2 = syncStatus;
+        if (line2 == null) {
+            String summary = repo.syncSummary();
+            line2 = summary == null ? null : getString(R.string.sync_source, summary);
+        }
+        dateText.setText(capitalize(fullDate(now)) + (line2 == null ? "" : "\n" + line2));
     }
 
     private static String fullDate(long now) {
@@ -195,6 +220,15 @@ public final class GuideActivity extends Activity implements EpgRepository.Liste
             case KeyEvent.KEYCODE_GUIDE:
             case KeyEvent.KEYCODE_ESCAPE:
                 finish();
+                return true;
+            case KeyEvent.KEYCODE_MENU:
+            case KeyEvent.KEYCODE_PROG_YELLOW:
+                // Manual refresh of the downloaded schedule.
+                if (!repo.isSyncing()) {
+                    syncStatus = getString(R.string.sync_manual);
+                    updateClock();
+                    repo.syncInBackground();
+                }
                 return true;
             default:
                 if (guide.onKey(keyCode)) return true;

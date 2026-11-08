@@ -36,7 +36,13 @@ final class EpgRepository {
         void onChannels(List<Channel> channels);
         void onPrograms();
         void onError(String message);
+        /** Progress or result of a schedule download; null when idle. */
+        void onSyncStatus(String message);
     }
+
+    /** A downloaded schedule older than this is refreshed when the guide opens. */
+    private static final long SYNC_STALE_MS = 20 * 3600_000L;
+    private volatile boolean syncing;
 
     private static EpgRepository instance;
 
@@ -182,7 +188,112 @@ final class EpgRepository {
         }
     }
 
+    /** Diagnostics to logcat: every channel row the provider shows us, with its program count for the next two days. */
+    void debugDump() {
+        bg.post(() -> {
+            long now = System.currentTimeMillis();
+            String[] projection = {
+                    TvContract.Channels._ID, TvContract.Channels.COLUMN_INPUT_ID, TvContract.Channels.COLUMN_DISPLAY_NUMBER,
+                    TvContract.Channels.COLUMN_DISPLAY_NAME, TvContract.Channels.COLUMN_TYPE, TvContract.Channels.COLUMN_BROWSABLE,
+                    TvContract.Channels.COLUMN_SERVICE_TYPE, TvContract.Channels.COLUMN_ORIGINAL_NETWORK_ID,
+                    TvContract.Channels.COLUMN_TRANSPORT_STREAM_ID, TvContract.Channels.COLUMN_SERVICE_ID, TvContract.Channels.COLUMN_SEARCHABLE,
+            };
+            try (Cursor c = ctx.getContentResolver().query(TvContract.Channels.CONTENT_URI, projection, null, null, null)) {
+                if (c == null) { Log.i(TAG, "dump: null cursor"); return; }
+                Log.i(TAG, "dump: " + c.getCount() + " channel rows in all");
+                while (c.moveToNext()) {
+                    long id = c.getLong(0);
+                    int count = 0;
+                    long first = 0, last = 0;
+                    try (Cursor p = ctx.getContentResolver().query(TvContract.buildProgramsUriForChannel(id, now - 6 * 3600_000L, now + 48 * 3600_000L),
+                            new String[] { TvContract.Programs.COLUMN_START_TIME_UTC_MILLIS, TvContract.Programs.COLUMN_END_TIME_UTC_MILLIS }, null, null, null)) {
+                        if (p != null) {
+                            count = p.getCount();
+                            if (p.moveToFirst()) first = p.getLong(0);
+                            if (p.moveToLast()) last = p.getLong(1);
+                        }
+                    } catch (RuntimeException e) {
+                        Log.w(TAG, "dump programs " + id + ": " + e);
+                    }
+                    Log.i(TAG, "dump: id=" + id + " num=" + c.getString(2) + " name=" + c.getString(3) + " input=" + c.getString(1)
+                            + " type=" + c.getString(4) + " browsable=" + c.getInt(5) + " searchable=" + c.getInt(10) + " svc=" + c.getString(6)
+                            + " onid=" + c.getInt(7) + " tsid=" + c.getInt(8) + " sid=" + c.getInt(9)
+                            + " programs48h=" + count + (count > 0 ? " first=" + first + " last=" + last : ""));
+                }
+            } catch (RuntimeException e) {
+                Log.w(TAG, "dump channels: " + e);
+            }
+            try (Cursor p = ctx.getContentResolver().query(TvContract.Programs.CONTENT_URI, new String[] { TvContract.Programs._ID }, null, null, null)) {
+                Log.i(TAG, "dump: " + (p == null ? -1 : p.getCount()) + " program rows visible in all");
+            } catch (RuntimeException e) {
+                Log.w(TAG, "dump all programs: " + e);
+            }
+        });
+    }
+
+    boolean needsSync() {
+        EpgDb db = EpgDb.get(ctx);
+        return System.currentTimeMillis() - db.updatedAt() > SYNC_STALE_MS || db.count() == 0;
+    }
+
+    boolean isSyncing() {
+        return syncing;
+    }
+
+    /** What the info panel shows about the downloaded schedule: its source and time, or nothing before the first one. */
+    String syncSummary() {
+        EpgDb db = EpgDb.get(ctx);
+        long at = db.updatedAt();
+        String src = db.meta("source");
+        if (at == 0 || src == null) return null;
+        return src + " · " + TimeFmt.hm(at);
+    }
+
+    /**
+     * Downloads the schedule on the calling thread (the sync job's thread, or the worker when called from the
+     * guide), then drops the program cache so the grid reloads with the merged data. done runs on the main thread.
+     */
+    void syncNow(Runnable done) {
+        if (syncing) return;
+        syncing = true;
+        main.post(() -> { if (listener != null) listener.onSyncStatus("Загрузка программы передач…"); });
+        List<Channel> list = channels;
+        if (list.isEmpty()) list = queryChannels(new String[1]);
+        XmltvSync.Result r = XmltvSync.run(ctx, list);
+        synchronized (lock) {
+            cache.clear();
+        }
+        syncing = false;
+        final String status = r.ok() ? null : "Программа не загружена: " + r.error;
+        main.post(() -> {
+            if (listener != null) {
+                listener.onSyncStatus(status);
+                listener.onPrograms();
+            }
+            if (done != null) done.run();
+        });
+    }
+
+    /** syncNow from the guide: on the worker thread, so the UI never waits for the network. */
+    void syncInBackground() {
+        if (syncing) return;
+        bg.post(() -> syncNow(null));
+    }
+
     private void loadChannelsNow() {
+        String[] error = new String[1];
+        List<Channel> all = queryChannels(error);
+        final List<Channel> published = Collections.unmodifiableList(all);
+        final String err = error[0];
+        main.post(() -> {
+            channels = published;
+            if (listener == null) return;
+            if (err != null && published.isEmpty()) listener.onError(err);
+            listener.onChannels(published);
+        });
+    }
+
+    private List<Channel> queryChannels(String[] errorOut) {
         TvInputManager tim = (TvInputManager) ctx.getSystemService(Context.TV_INPUT_SERVICE);
         List<TvInputInfo> inputs = tim == null ? Collections.emptyList() : tim.getTvInputList();
         List<String> tunerInputs = new ArrayList<>();
@@ -221,14 +332,8 @@ final class EpgRepository {
         });
         Log.i(TAG, "channels: " + all.size() + (all.isEmpty() ? "" : ", first " + all.get(0).number + " " + all.get(0).name
                 + ", last " + all.get(all.size() - 1).number + " " + all.get(all.size() - 1).name));
-        final List<Channel> published = Collections.unmodifiableList(all);
-        final String err = error;
-        main.post(() -> {
-            channels = published;
-            if (listener == null) return;
-            if (err != null && published.isEmpty()) listener.onError(err);
-            listener.onChannels(published);
-        });
+        errorOut[0] = error;
+        return all;
     }
 
     private List<Program> queryPrograms(long channelId, long from, long to) {
@@ -262,6 +367,29 @@ final class EpgRepository {
         // Overlaps from a re-sent schedule: keep the later row, the tuner's newer one.
         for (int i = out.size() - 1; i > 0; i--) {
             if (out.get(i).start < out.get(i - 1).end) out.remove(i - 1);
+        }
+        // The downloaded schedule fills everything the tuner did not write. The tuner's rows win where they
+        // overlap: their times come off the air, and their descriptions with them.
+        List<Program> downloaded;
+        try {
+            downloaded = EpgDb.get(ctx).programs(channelId, from, to);
+        } catch (RuntimeException e) {
+            Log.w(TAG, "epg db read failed: " + e);
+            downloaded = Collections.emptyList();
+        }
+        if (!downloaded.isEmpty()) {
+            List<Program> merged = new ArrayList<>(out.size() + downloaded.size());
+            merged.addAll(out);
+            for (Program d : downloaded) {
+                boolean clash = false;
+                for (Program t : out) {
+                    long overlap = Math.min(d.end, t.end) - Math.max(d.start, t.start);
+                    if (overlap > 60_000L) { clash = true; break; }
+                }
+                if (!clash) merged.add(d);
+            }
+            Collections.sort(merged, (a, b) -> Long.compare(a.start, b.start));
+            out = merged;
         }
         return Collections.unmodifiableList(out);
     }
