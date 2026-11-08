@@ -151,7 +151,8 @@ final class Reminders {
             Log.w(Tuner.TAG, "exact alarm refused, using an inexact one: " + e);
             am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending(ctx, r));
         }
-        Log.i(Tuner.TAG, "reminder armed: " + r.channelNumber + " " + r.title + " at " + r.start);
+        Log.i(Tuner.TAG, "reminder armed: channel " + r.channelId + " (" + r.channelNumber + ") " + r.title + " at " + r.start
+                + ", alarm at " + at);
     }
 
     private static void cancel(Context ctx, Reminder r) {

@@ -11,6 +11,7 @@ public final class ReminderReceiver extends BroadcastReceiver {
     @Override public void onReceive(Context ctx, Intent intent) {
         long channelId = intent.getLongExtra(Reminders.EXTRA_CHANNEL, -1);
         long start = intent.getLongExtra(Reminders.EXTRA_START, 0);
+        Log.i(Tuner.TAG, "reminder fired: channel " + channelId + " start " + start);
         if (channelId < 0) return;
         boolean known = Reminders.keys(ctx).contains(channelId + ":" + start);
         Reminders.remove(ctx, channelId, start);

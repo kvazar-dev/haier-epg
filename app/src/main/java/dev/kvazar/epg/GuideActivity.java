@@ -60,6 +60,8 @@ public final class GuideActivity extends Activity implements EpgRepository.Liste
     @Override protected void onStart() {
         super.onStart();
         repo.setListener(this);
+        // An app update or a force stop drops the alarms while the list survives: arm them again on every start.
+        Reminders.rescheduleAll(this);
         guide.setScheduled(Reminders.keys(this));
         if (checkSelfPermission(PERM_TV_LISTINGS) != PackageManager.PERMISSION_GRANTED) {
             showMessage(getString(R.string.no_permission));
