@@ -102,15 +102,24 @@ final class XmltvSync {
     }
 
     private static Set<Long> fetch(String url, List<Channel> channels, List<Program> out) throws IOException, XmlPullParserException {
-        HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
-        conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
-        conn.setReadTimeout(READ_TIMEOUT_MS);
-        conn.setInstanceFollowRedirects(true);
-        conn.setRequestProperty("User-Agent", "haier-epg/0.2 (Android TV)");
-        conn.setRequestProperty("Accept-Encoding", "identity");
+        HttpURLConnection conn = open(url);
         try {
-            int code = conn.getResponseCode();
-            if (code != 200) throw new IOException("HTTP " + code);
+            // HttpURLConnection follows redirects only within one scheme; a feed that moved from http to https
+            // or to another host answers 301/302/307/308 with a Location, which is followed here, a few hops.
+            for (int hop = 0; hop < 4; hop++) {
+                int code = conn.getResponseCode();
+                if (code / 100 == 3) {
+                    String location = conn.getHeaderField("Location");
+                    if (location == null || location.isEmpty()) throw new IOException("HTTP " + code + " without Location");
+                    URL next = new URL(new URL(url), location);
+                    conn.disconnect();
+                    url = next.toString();
+                    conn = open(url);
+                    continue;
+                }
+                if (code != 200) throw new IOException("HTTP " + code);
+                break;
+            }
             InputStream raw = new BufferedInputStream(conn.getInputStream(), 64 * 1024);
             raw.mark(4);
             int b1 = raw.read(), b2 = raw.read();
@@ -120,6 +129,16 @@ final class XmltvSync {
         } finally {
             conn.disconnect();
         }
+    }
+
+    private static HttpURLConnection open(String url) throws IOException {
+        HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+        conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
+        conn.setReadTimeout(READ_TIMEOUT_MS);
+        conn.setInstanceFollowRedirects(false);
+        conn.setRequestProperty("User-Agent", "haier-epg/0.2 (Android TV)");
+        conn.setRequestProperty("Accept-Encoding", "identity");
+        return conn;
     }
 
     private static Set<Long> parse(InputStream in, List<Channel> channels, List<Program> out) throws IOException, XmlPullParserException {
