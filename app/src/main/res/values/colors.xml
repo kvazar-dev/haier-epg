@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="scrim">#E60B0D12</color>
+    <color name="panel">#F2141821</color>
+    <color name="text">#F2FFFFFF</color>
+    <color name="text_dim">#99FFFFFF</color>
+    <color name="text_faint">#59FFFFFF</color>
+    <color name="accent">#FF3D8BFF</color>
+    <color name="accent_text">#FFFFFFFF</color>
+    <color name="row_line">#1AFFFFFF</color>
+    <color name="block">#26FFFFFF</color>
+    <color name="block_past">#14FFFFFF</color>
+    <color name="block_current">#333D8BFF</color>
+    <color name="channel_current">#262F6FE0</color>
+    <color name="now_line">#FFFF5A5A</color>
+    <color name="header_text">#B3FFFFFF</color>
+</resources>

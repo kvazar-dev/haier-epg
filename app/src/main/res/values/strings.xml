@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Программа передач</string>
+    <string name="no_data">Нет данных</string>
+    <string name="no_channels">Каналы не найдены. Настройте каналы в приложении Live TV.</string>
+    <string name="no_permission">Нет доступа к списку каналов. Выдайте разрешение READ_TV_LISTINGS.</string>
+    <string name="loading">Загрузка…</string>
+    <string name="now">Сейчас</string>
+    <string name="schedule_title">Запланировать переключение?</string>
+    <string name="schedule_text">%1$s в %2$s\n%3$s</string>
+    <string name="schedule_yes">Запланировать</string>
+    <string name="schedule_cancel">Отмена</string>
+    <string name="schedule_remove">Отменить напоминание</string>
+    <string name="scheduled_toast">Переключение на %1$s в %2$s запланировано</string>
+    <string name="unscheduled_toast">Напоминание отменено</string>
+    <string name="prompt_text">Начинается «%1$s»\n%2$s</string>
+    <string name="prompt_switch">Переключить (%1$d)</string>
+    <string name="prompt_cancel">Отмена</string>
+    <string name="channel_fmt">%1$s · %2$s</string>
+    <string name="time_range">%1$s – %2$s</string>
+    <string name="scheduled_mark">⏰</string>
+</resources>
